@@ -7,6 +7,8 @@ package org.geoserver.web.data.store.panel;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -15,10 +17,11 @@ import org.apache.wicket.model.IModel;
 import org.geoserver.platform.GeoServerExtensions;
 import org.geoserver.platform.GeoServerResourceLoader;
 import org.geoserver.platform.resource.Files;
+import org.geotools.data.DataUtilities;
 import org.geotools.util.logging.Logging;
 
 /**
- * Makes sure the file path for files do start with file:// otherwise
+ * Makes sure the file path for files do start with file: otherwise
  * stuff like /home/user/file.shp won't be recognized as valid. Also, if a 
  * path is inside the data directory it will be turned into a relative path 
  * @author Andrea Aime - GeoSolutions
@@ -67,36 +70,38 @@ public class FileModel implements IModel<String> {
     }
 
     public void setObject(String location) {
-        
-        if(location != null) {
+        if (location != null) {
             File dataDirectory = canonicalize(rootDir);
             File file = canonicalize(new File(location));
-            if(isSubfile(dataDirectory, file)) {
+            if (isSubfile(dataDirectory, file)) {
                 File curr = file;
                 String path = null;
                 // paranoid check to avoid infinite loops
-                while(curr != null && !curr.equals(dataDirectory)){
-                    if(path == null) {
+                while (curr != null && !curr.equals(dataDirectory)) {
+                    if (path == null) {
                         path = curr.getName();
                     } else {
                         path = curr.getName() + "/" + path;
                     }
                     curr = curr.getParentFile();
-                } 
-                location = "file:" + path;
-            }
-            else {
-                File dataFile = Files.url( rootDir, location );
-                if( dataFile != null && !dataFile.equals(file)) {
+                }
+                try {
+                    location = (new URI("file", path, null)).toASCIIString();
+                } catch (URISyntaxException e) {
+                    throw new RuntimeException(
+                            "Could not convert file location '" + path + "' to URL", e);
+                }
+            } else {
+                File dataFile = Files.url(rootDir, location);
+                if (dataFile != null && !dataFile.equals(file)) {
                     // relative to the data directory, does not need fixing
                 } else {
-                    location = "file://" + file.getAbsolutePath();
+                    location = DataUtilities.fileToURL(file).toString();
                 }
             }
         }
         delegate.setObject(location);
     }
-
 
     /**
      * Turns a file in canonical form if possible
